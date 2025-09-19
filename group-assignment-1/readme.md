@@ -1,5 +1,10 @@
 # Group Assignment One
 
+Group Names
+
+* Henry Brown (hbrown26@myseneca.ca)
+* Lynne Ngo (dngo13@myseneca.ca)
+
 ### EBO Avoiding Repetition Discussion
 
 We only need to define four vertices if we are using EBO. Without it, we need to define 6 vertices, and two pairs of those vertices are repeated. So, by removing these we are removing repetition.
