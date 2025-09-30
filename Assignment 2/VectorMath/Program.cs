@@ -35,7 +35,7 @@ namespace WindowEngine
             Console.WriteLine(combinedMatrix);
 
             Vector vector = new Vector(1, 0, 0);
-            Matrix transformed = combinedMatrix.Transform(vector);
+            Vector transformed = combinedMatrix.Transform(vector);
             Console.WriteLine($"Original Vector: {vector}");
             Console.WriteLine($"Transformed Vector: {transformed}");
         }
