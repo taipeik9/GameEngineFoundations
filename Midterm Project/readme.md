@@ -2,7 +2,7 @@
 
 In this game, I've implement a title screen, fun movement, a textured cube (crate) along with lighting manipulation.
 
-FYI: there is a demonstration video in the ZIP submission file, so all of this information will be in that recording.
+FYI: there is a demonstration video in the submission, so all of this information will be in that recording.
 
 Movement instructions
 - WASD keys for moving around
