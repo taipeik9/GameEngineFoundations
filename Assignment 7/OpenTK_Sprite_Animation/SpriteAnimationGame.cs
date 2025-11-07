@@ -1,33 +1,24 @@
-﻿// File: Program.cs
-//
-// Fix explained: some OpenTK versions expose
-// Matrix4.CreateOrthographicOffCenter(float left, float right, float bottom, float top, float zNear, float zFar)
-// but older/newer API names may differ (e.g., near, far). Using *named* args can break across versions.
-// We switch to *positional* args to be version-agnostic: CreateOrthographicOffCenter(0, 800, 0, 600, -1, 1).
-
-using OpenTK.Graphics.OpenGL4;                       // OpenGL API
-using OpenTK.Windowing.Common;                       // Frame events (OnLoad/OnUpdate/OnRender)
-using OpenTK.Windowing.Desktop;                      // GameWindow/NativeWindowSettings
-using OpenTK.Windowing.GraphicsLibraryFramework;     // Keyboard state
-using OpenTK.Mathematics;                            // Matrix4, Vector types
-using System;
-using System.IO;
-using ImageSharp = SixLabors.ImageSharp.Image;       // Alias for brevity
-using SixLabors.ImageSharp.PixelFormats;             // Rgba32 pixel type
+using OpenTK.Graphics.OpenGL4;
+using OpenTK.Windowing.Common;
+using OpenTK.Windowing.Desktop;
+using OpenTK.Windowing.GraphicsLibraryFramework;
+using OpenTK.Mathematics;
+using SixLabors.ImageSharp.PixelFormats;
+using ImageSharp = SixLabors.ImageSharp.Image;
 
 namespace OpenTK_Sprite_Animation
 {
     public class SpriteAnimationGame : GameWindow
     {
-        private Character _character;                 // Handles animation state + UV selection
-        private int _shaderProgram;                   // Linked GLSL program
-        private int _vao, _vbo;                       // Geometry
-        private int _texture;                         // Sprite sheet
+        private Character _character;
+        private int _shaderProgram;
+        private int _vao, _vbo;
+        private int _texture;
 
         public SpriteAnimationGame()
             : base(
                 new GameWindowSettings(),
-                new NativeWindowSettings { Size = (800, 600), Title = "Sprite Animation" })
+                new NativeWindowSettings { ClientSize = (800, 600), Title = "Sprite Animation" })
         { }
 
         protected override void OnLoad()
@@ -39,7 +30,7 @@ namespace OpenTK_Sprite_Animation
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
             _shaderProgram = CreateShaderProgram();   // Compile + link
-            _texture = LoadTexture("Sprite_Character.png"); // Upload sprite sheet
+            _texture = LoadTexture("assets/Sprite_Character.png"); // Upload sprite sheet
 
             // Quad vertices: [pos.x, pos.y, uv.x, uv.y], centered model space
             float w = 32f, h = 64f;                   // Half-size: results in 64x128 sprite
@@ -132,29 +123,31 @@ namespace OpenTK_Sprite_Animation
         {
             // Vertex Shader: transforms positions, flips V in UVs (image origin vs GL origin)
             string vs = @"
-#version 330 core
-layout(location = 0) in vec2 aPosition;
-layout(location = 1) in vec2 aTexCoord;
-out vec2 vTexCoord;
-uniform mat4 projection;
-uniform mat4 model;
-void main() {
-    gl_Position = projection * model * vec4(aPosition, 0.0, 1.0);
-    vTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y); // flip V so PNGs read intuitively
-}";
+                #version 330 core
+                layout(location = 0) in vec2 aPosition;
+                layout(location = 1) in vec2 aTexCoord;
+                out vec2 vTexCoord;
+                uniform mat4 projection;
+                uniform mat4 model;
+                void main() {
+                    gl_Position = projection * model * vec4(aPosition, 0.0, 1.0);
+                    vTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y); // flip V so PNGs read intuitively
+                }
+            ";
 
             // Fragment Shader: samples sub-rect of the sheet using uOffset/uSize
             string fs = @"
-#version 330 core
-in vec2 vTexCoord;
-out vec4 color;
-uniform sampler2D uTexture; // bound to texture unit 0
-uniform vec2 uOffset;       // normalized UV start (0..1)
-uniform vec2 uSize;         // normalized UV size  (0..1)
-void main() {
-    vec2 uv = uOffset + vTexCoord * uSize;
-    color = texture(uTexture, uv);
-}";
+                #version 330 core
+                in vec2 vTexCoord;
+                out vec4 color;
+                uniform sampler2D uTexture; // bound to texture unit 0
+                uniform vec2 uOffset;       // normalized UV start (0..1)
+                uniform vec2 uSize;         // normalized UV size  (0..1)
+                void main() {
+                    vec2 uv = uOffset + vTexCoord * uSize;
+                    color = texture(uTexture, uv);
+                }
+            ";
 
             int v = GL.CreateShader(ShaderType.VertexShader);
             GL.ShaderSource(v, vs);
@@ -194,7 +187,7 @@ void main() {
                 throw new Exception($"PROGRAM LINK ERROR:\n{GL.GetProgramInfoLog(program)}");
         }
 
-        // --- Texture loading ------------------------------------------------------------------
+        // Texture loading
 
         private int LoadTexture(string path)
         {
@@ -224,100 +217,6 @@ void main() {
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 
             return tex;
-        }
-    }
-
-    // --- Direction input abstraction -----------------------------------------------------------
-    public enum Direction { None, Right, Left }
-
-    // --- Animator ------------------------------------------------------------------------------
-    public class Character
-    {
-        private readonly int _shader;  // Program containing uOffset/uSize
-        private float _timer;          // Accumulated time for frame stepping
-        private int _frame;            // Current frame column (0..FrameCount-1)
-        private Direction _currentDir; // Last non-none direction
-
-        // Timing
-        private const float FrameTime = 0.15f; // seconds per frame
-        private const int FrameCount = 4;      // frames per row
-
-        // Sprite sheet layout (pixel units) — edit to match your atlas
-        private const float FrameW = 64f;
-        private const float FrameH = 128f;
-        private const float Gap = 60f;      // horizontal spacing between frames
-        private const float TotalW = FrameW + Gap;
-        private const float SheetW = 4 * TotalW - Gap; // 4 columns
-        private const float SheetH = 256f;     // 2 rows of 128 => 256
-
-        public Character(int shader)
-        {
-            _shader = shader;
-            _currentDir = Direction.None;
-            SetIdle();                          // Pick a visible starting frame
-        }
-
-        public void Update(float delta, Direction dir)
-        {
-            // Requirement: when input stops, keep showing the last used frame.
-            if (dir == Direction.None)
-            {
-                _currentDir = Direction.None;   // Remember idle, but DON'T touch uniforms
-                return;
-            }
-
-            // If started moving or changed side: restart cycle
-            if (_currentDir != dir)
-            {
-                _timer = 0f;
-                _frame = 0;
-                _currentDir = dir;
-            }
-
-            _timer += delta;
-            if (_timer >= FrameTime)
-            {
-                _timer -= FrameTime;
-                _frame = (_frame + 1) % FrameCount;
-            }
-
-            int row = dir == Direction.Right ? 0 : 1; // Row per direction
-            SetFrame(_frame, row);                    // Update UV uniforms
-        }
-
-        public void Render()
-        {
-            GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4); // Draw quad
-        }
-
-        private void SetIdle()
-        {
-            SetFrame(0, 0); // Any default you prefer
-        }
-
-        // Converts (col,row) in pixels to normalized UVs and uploads to shader
-        private void SetFrame(int col, int row)
-        {
-            float x = (col * TotalW) / SheetW; // normalized start U
-            float y = (row * FrameH) / SheetH; // normalized start V
-            float w = FrameW / SheetW;         // normalized width
-            float h = FrameH / SheetH;         // normalized height
-
-            GL.UseProgram(_shader);
-            int off = GL.GetUniformLocation(_shader, "uOffset");
-            int sz = GL.GetUniformLocation(_shader, "uSize");
-            GL.Uniform2(off, x, y);
-            GL.Uniform2(sz, w, h);
-        }
-    }
-
-    // --- Entry point ---------------------------------------------------------------------------
-    internal class Program
-    {
-        private static void Main()
-        {
-            using var game = new SpriteAnimationGame(); // Ensures Dispose/OnUnload is called
-            game.Run();                                  // Game loop: Load -> (Update/Render)* -> Unload
         }
     }
 }
