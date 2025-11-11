@@ -3,8 +3,6 @@ using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using OpenTK.Mathematics;
-using SixLabors.ImageSharp.PixelFormats;
-using ImageSharp = SixLabors.ImageSharp.Image;
 
 namespace OpenTK_Sprite_Animation
 {
@@ -14,6 +12,7 @@ namespace OpenTK_Sprite_Animation
         private int _shaderProgram;
         private int _vao, _vbo;
         private int _texture;
+        private Background _background;
 
         public SpriteAnimationGame()
             : base(
@@ -30,7 +29,7 @@ namespace OpenTK_Sprite_Animation
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
             _shaderProgram = CreateShaderProgram();   // Compile + link
-            _texture = LoadTexture("assets/Sprite_Character.png"); // Upload sprite sheet
+            _texture = Utils.LoadTexture("assets/Sprite_Character.png"); // Upload sprite sheet
 
             // Quad vertices: [pos.x, pos.y, uv.x, uv.y], centered model space
             float w = 32f, h = 64f;                   // Half-size: results in 64x128 sprite
@@ -69,12 +68,9 @@ namespace OpenTK_Sprite_Animation
             Matrix4 ortho = Matrix4.CreateOrthographicOffCenter(0, 800, 0, 600, -1, 1);
             GL.UniformMatrix4(projLoc, false, ref ortho);
 
-            // Model transform: place the quad at window center (400,300)
-            int modelLoc = GL.GetUniformLocation(_shaderProgram, "model");
-            Matrix4 model = Matrix4.CreateTranslation(400, 300, 0);
-            GL.UniformMatrix4(modelLoc, false, ref model);
-
             _character = new Character(_shaderProgram); // Initializes idle frame uniforms
+
+            _background = new Background("assets/Background.png");
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)
@@ -83,12 +79,20 @@ namespace OpenTK_Sprite_Animation
 
             // Read keyboard state -> map to Direction
             var keyboard = KeyboardState;
+
+            if (keyboard.IsKeyDown(Keys.Escape))
+            {
+                Close();
+            }
+
             Direction dir = Direction.None;
-            if (keyboard.IsKeyDown(Keys.Right)) dir = Direction.Right;
-            else if (keyboard.IsKeyDown(Keys.Left)) dir = Direction.Left;
+            if (keyboard.IsKeyDown(Keys.Right) || keyboard.IsKeyDown(Keys.D)) dir = Direction.Right;
+            else if (keyboard.IsKeyDown(Keys.Left) || keyboard.IsKeyDown(Keys.A)) dir = Direction.Left;
+            bool jump = keyboard.IsKeyDown(Keys.Space);
+            bool sprint = keyboard.IsKeyDown(Keys.LeftShift);
 
             // Animation update; when dir == None we *keep last frame visible*
-            _character.Update((float)e.Time, dir);
+            _character.Update((float)e.Time, dir, jump, sprint);
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)
@@ -96,6 +100,15 @@ namespace OpenTK_Sprite_Animation
             base.OnRenderFrame(e);
 
             GL.Clear(ClearBufferMask.ColorBufferBit);
+
+            _background.Render();
+
+            GL.UseProgram(_shaderProgram);
+
+            // Model transform: update character position
+            int modelLoc = GL.GetUniformLocation(_shaderProgram, "model");
+            Matrix4 model = Matrix4.CreateTranslation(_character.getPosition());
+            GL.UniformMatrix4(modelLoc, false, ref model);
 
             // Bind texture and VAO, then draw
             GL.ActiveTexture(TextureUnit.Texture0);
@@ -152,18 +165,18 @@ namespace OpenTK_Sprite_Animation
             int v = GL.CreateShader(ShaderType.VertexShader);
             GL.ShaderSource(v, vs);
             GL.CompileShader(v);
-            CheckShaderCompile(v, "VERTEX");
+            Utils.CheckShaderCompile(v, "VERTEX");
 
             int f = GL.CreateShader(ShaderType.FragmentShader);
             GL.ShaderSource(f, fs);
             GL.CompileShader(f);
-            CheckShaderCompile(f, "FRAGMENT");
+            Utils.CheckShaderCompile(f, "FRAGMENT");
 
             int p = GL.CreateProgram();
             GL.AttachShader(p, v);
             GL.AttachShader(p, f);
             GL.LinkProgram(p);
-            CheckProgramLink(p);
+            Utils.CheckProgramLink(p);
 
             GL.DetachShader(p, v);
             GL.DetachShader(p, f);
@@ -171,52 +184,6 @@ namespace OpenTK_Sprite_Animation
             GL.DeleteShader(f);
 
             return p;
-        }
-
-        private static void CheckShaderCompile(int shader, string stage)
-        {
-            GL.GetShader(shader, ShaderParameter.CompileStatus, out int ok);
-            if (ok == 0)
-                throw new Exception($"{stage} SHADER COMPILE ERROR:\n{GL.GetShaderInfoLog(shader)}");
-        }
-
-        private static void CheckProgramLink(int program)
-        {
-            GL.GetProgram(program, GetProgramParameterName.LinkStatus, out int ok);
-            if (ok == 0)
-                throw new Exception($"PROGRAM LINK ERROR:\n{GL.GetProgramInfoLog(program)}");
-        }
-
-        // Texture loading
-
-        private int LoadTexture(string path)
-        {
-            if (!File.Exists(path))
-                throw new FileNotFoundException($"Texture not found: {path}", path);
-
-            using var img = ImageSharp.Load<Rgba32>(path); // decode to RGBA8
-
-            int tex = GL.GenTexture();
-            GL.BindTexture(TextureTarget.Texture2D, tex);
-
-            // Copy raw pixels to managed buffer then upload
-            var pixels = new byte[4 * img.Width * img.Height];
-            img.CopyPixelDataTo(pixels);
-
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba,
-                          img.Width, img.Height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, pixels);
-
-            GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
-
-            // Nearest: prevents bleeding between adjacent frames on the atlas
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-
-            // Clamp: avoid wrap artifacts at frame borders
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
-
-            return tex;
         }
     }
 }

@@ -10,3 +10,6 @@ obj
 
 # videos
 *.mov
+
+# illustrator files
+*.ai
