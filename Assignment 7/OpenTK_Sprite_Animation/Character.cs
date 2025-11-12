@@ -194,10 +194,12 @@ namespace OpenTK_Sprite_Animation
             if (_position.X - CharacterHalfWidth < 0)
             {
                 _position.X = CharacterHalfWidth;
+                _velocityX = 0;
             }
             else if (_position.X + CharacterHalfWidth > Constants.WindowWidth)
             {
                 _position.X = Constants.WindowWidth - CharacterHalfWidth;
+                _velocityX = 0;
             }
         }
         public void Update(float delta, Direction dir, bool jump, bool sprint, bool crouch)

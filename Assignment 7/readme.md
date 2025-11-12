@@ -1,0 +1,15 @@
+# Assignment 7 - Advanced Sprite Animation
+
+So, here is my Assignment 7. I had fun implementing the movement along with the background to the given sprite demo. I added walking, sprinting, jumping and crouching (which I craeted a new sprite for in Illustrator). I am most happy with the physics system. It was difficult to implement. There is acceleration and decceleration with movement, gravity and collision detection for the ground and for the edges of the window. There are also some more specifics: when you jump, your momentum is carried, you can influence that momentum but not fully change directions / stop in the air, which was a nice touch. There is "short hopping" and "full hopping" which was inspired by my favourite game Super Smash Bros. When you press the jump button, if you hold it then you get a full hop, if you tap it then you get a short hop. There's a small window to get a short hop.
+
+As for the state machine - you can find the states in my enums folder under PlayerState. There are 6 states, however, the states can stack / be active at the same time. Some are exclusive but others can be activated concurrently. The reasoning for this is because a player can be "grounded" and "crouching" or "walking" and "grounded" or "sprinting" and "PreJump" (the prejump state is for tracking the short hop / full hop).
+
+My first thoughts on implementing this was to use an array, and pop / push the states, but I thought this seemed like too much overhead. Iterating through the states array to check every single time we want to know what states are in there. So, then I thought about using a HashMap, but I settled on a simpler solution under the hood, as a hashmap can create a bit of bloat. I ended up using a Flag enum with bitwise operations on it. Each enum represents a bit position, and I used the "equals or" operator (|=) to "turn on" the states and the "equals and negation" operator (&= ~) to turn off the states. This way there is a clean simple, lightweight solution for having multiple states active at once.
+
+There is still good separation of states, like you cannot begin or stop sprinting while in the air - if you start sprinting then jumped, you will keep that momentum, and if you were not sprinting then you cannot start once airborn. If you start a crouch while moving, then you will deccelerate to a stop. You can jump out of crouch but you will stop crouching until you are grounded again etc.
+
+Also, I really tried to test it on a Windows machine but could not this time again. The virtual commons machine did not have Visual Studio installed on it and I didn't have permissions to do so. And it was just fully not working on my virtual machine on my Mac. I hope that it does work on yours this time though, I added the assets to the .csproj.
+
+Instructions:
+
+WASD or arrow keys to move, space bar to jump, left shift to sprint.
