@@ -17,7 +17,7 @@ namespace OpenTK_Sprite_Animation
         public SpriteAnimationGame()
             : base(
                 new GameWindowSettings(),
-                new NativeWindowSettings { ClientSize = (800, 600), Title = "Sprite Animation" })
+                new NativeWindowSettings { ClientSize = (Constants.WindowWidth, Constants.WindowHeight), Title = "CrouchJumpSprint Game" })
         { }
 
         protected override void OnLoad()
@@ -65,7 +65,7 @@ namespace OpenTK_Sprite_Animation
             // Orthographic projection (pixel coordinates 0..800, 0..600)
             // IMPORTANT: positional args to avoid API-name mismatch across OpenTK versions.
             int projLoc = GL.GetUniformLocation(_shaderProgram, "projection");
-            Matrix4 ortho = Matrix4.CreateOrthographicOffCenter(0, 800, 0, 600, -1, 1);
+            Matrix4 ortho = Matrix4.CreateOrthographicOffCenter(0, Constants.WindowWidth, 0, Constants.WindowHeight, -1, 1);
             GL.UniformMatrix4(projLoc, false, ref ortho);
 
             _character = new Character(_shaderProgram); // Initializes idle frame uniforms
@@ -88,11 +88,12 @@ namespace OpenTK_Sprite_Animation
             Direction dir = Direction.None;
             if (keyboard.IsKeyDown(Keys.Right) || keyboard.IsKeyDown(Keys.D)) dir = Direction.Right;
             else if (keyboard.IsKeyDown(Keys.Left) || keyboard.IsKeyDown(Keys.A)) dir = Direction.Left;
+            bool crouch = keyboard.IsKeyDown(Keys.Down) || keyboard.IsKeyDown(Keys.S);
             bool jump = keyboard.IsKeyDown(Keys.Space);
             bool sprint = keyboard.IsKeyDown(Keys.LeftShift);
 
             // Animation update; when dir == None we *keep last frame visible*
-            _character.Update((float)e.Time, dir, jump, sprint);
+            _character.Update((float)e.Time, dir, jump, sprint, crouch);
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)

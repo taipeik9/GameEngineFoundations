@@ -15,12 +15,13 @@ namespace OpenTK_Sprite_Animation
             _shader = CreateShaderProgram();
             _texture = Utils.LoadTexture(texturePath, true);
 
+            // covering the entire bg of the window
             float[] vertices =
             {
                 0f, 0f, 0f, 0f,
-                800f, 0f, 1f, 0f,
-                800f, 600f, 1f, 1f,
-                0f, 600f, 0f, 1f
+                Constants.WindowWidth, 0f, 1f, 0f,
+                Constants.WindowWidth, Constants.WindowHeight, 1f, 1f,
+                0f, Constants.WindowHeight, 0f, 1f
             };
 
             _vao = GL.GenVertexArray();
@@ -49,7 +50,7 @@ namespace OpenTK_Sprite_Animation
             int texLoc = GL.GetUniformLocation(_shader, "uTexture");
             GL.Uniform1(texLoc, 0);
 
-            Matrix4 proj = Matrix4.CreateOrthographicOffCenter(0, 800, 0, 600, -1, 1);
+            Matrix4 proj = Matrix4.CreateOrthographicOffCenter(0, Constants.WindowWidth, 0, Constants.WindowHeight, -1, 1);
             int projLoc = GL.GetUniformLocation(_shader, "projection");
             GL.UniformMatrix4(projLoc, false, ref proj);
 

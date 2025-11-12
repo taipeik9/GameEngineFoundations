@@ -8,9 +8,9 @@ namespace OpenTK_Sprite_Animation
         private readonly int _shader;  // Program containing uOffset/uSize
         private float _spriteTimer;          // Accumulated time for frame stepping
         private int _frame;            // Current frame column (0..FrameCount-1)
-        private Direction _currentDir;
-        private Direction _lastDir;
+        private Direction _lastDir = Direction.Right;
         private Vector3 _position = new Vector3(400, 300, 0);
+        private PlayerState _state;
 
         // movement variables
         private float _velocityX = 0.0f;
@@ -24,14 +24,12 @@ namespace OpenTK_Sprite_Animation
 
         private const float _airAccelFactor = 0.35f; // multiplier for acceleration in air
         private const float _airDrag = 40.0f; // constant passive deceleration in the air
-        private bool _isGrounded = false;
         private float _velocityY = 0.0f;
-        private const float _shortHopJumpSpeed = 350f;
-        private const float _fullHopJumpSpeed = 425f;
+        private const float _shortHopJumpSpeed = 325f;
+        private const float _fullHopJumpSpeed = 450f;
         private const float _groundY = 160.0f;
         private const float _gravity = -980f;
         private float jumpTimer = 0.0f;
-        private bool startJump = false;
         private const float shortHopLimit = 0.1f;
 
         // Timing
@@ -49,7 +47,6 @@ namespace OpenTK_Sprite_Animation
         public Character(int shader)
         {
             _shader = shader;
-            _currentDir = Direction.None;
             SetIdle();
         }
 
@@ -58,28 +55,18 @@ namespace OpenTK_Sprite_Animation
             return _position;
         }
 
-        private void RestartSpriteCycle(Direction dir)
-        {
-            _spriteTimer = 0.14f; // starts at the end, so animation occurs on button press
-            _frame = 0;
-            _currentDir = dir;
-        }
-
-        public void Update(float delta, Direction dir, bool jump, bool isSprinting)
+        private void HandleSpriteChange(float delta, Direction dir)
         {
             int row;
-            if (_currentDir != dir)
-            {
-                RestartSpriteCycle(dir);
-            }
 
             // sprite logic
-            if (dir == Direction.None)
+            if (_state.HasFlag(PlayerState.Idle))
             {
-                _currentDir = Direction.None;
+                _spriteTimer = 0.14f;
+                _frame = 0;
                 row = _lastDir == Direction.Right ? 0 : 1;
             }
-            else
+            else if ((_state & (PlayerState.Walking | PlayerState.Sprinting)) != 0)
             {
                 _spriteTimer += delta;
                 if (_spriteTimer >= FrameTime)
@@ -90,44 +77,53 @@ namespace OpenTK_Sprite_Animation
 
                 row = dir == Direction.Right ? 0 : 1; // Row per direction
 
-                _lastDir = _currentDir;
+                _lastDir = dir;
+            }
+            else
+            {
+                _frame = 4;
+                row = _lastDir == Direction.Right ? 0 : 1;
             }
             SetFrame(_frame, row); // Update UV uniforms
+        }
 
-            // horizontal movement logic
-            bool sprint = !_isGrounded ? _wasSprinting : isSprinting;
+        private void HandleHorizontalMovement(float delta, Direction dir)
+        {
+            bool controlledSprint = !_state.HasFlag(PlayerState.Grounded) ? _wasSprinting : _state.HasFlag(PlayerState.Sprinting);
 
-            float accel = sprint ? _accelSprinting : _accelWalking;
-            float normalizedAccel = (_isGrounded ? accel : accel * _airAccelFactor) * delta;
-            float maxVelocity = sprint ? _maxVelocitySprinting : _maxVelocityWalking;
+            float accel = controlledSprint ? _accelSprinting : _accelWalking;
+            float normalizedAccel = (_state.HasFlag(PlayerState.Grounded) ? accel : accel * _airAccelFactor) * delta;
+            float maxVelocity = controlledSprint ? _maxVelocitySprinting : _maxVelocityWalking;
 
             int dirSign = dir == Direction.Right ? 1 : dir == Direction.Left ? -1 : 0;
 
-            if (_isGrounded)
+            if (_state.HasFlag(PlayerState.Grounded))
             {
                 // normal movement logic for grounded player
-                if (dirSign != 0)
+                // this is a bitwise or checking if either walking or sprinting are in state
+                if ((_state & (PlayerState.Walking | PlayerState.Sprinting)) != 0)
                 {
                     _velocityX += normalizedAccel * dirSign;
                 }
                 else
                 {
-                    if (_velocityX < 0)
-                    {
-                        _velocityX += normalizedAccel;
-                        if (_velocityX > 0) _velocityX = 0;
-                    }
-                    else if (_velocityX > 0)
+                    // deceleration to zero
+                    if (_velocityX > 0)
                     {
                         _velocityX -= normalizedAccel;
                         if (_velocityX < 0) _velocityX = 0;
+                    }
+                    else if (_velocityX < 0)
+                    {
+                        _velocityX += normalizedAccel;
+                        if (_velocityX > 0) _velocityX = 0;
                     }
                 }
             }
             else
             {
                 // modified movement logic including air properties for non-grounded player
-                if (dirSign != 0)
+                if ((_state & (PlayerState.Walking | PlayerState.Sprinting)) != 0)
                 {
                     if (Math.Sign(_velocityX) == dirSign || _velocityX == 0f)
                     {
@@ -161,14 +157,12 @@ namespace OpenTK_Sprite_Animation
 
             _position.X += _velocityX * delta;
 
-            _wasSprinting = sprint;
+            _wasSprinting = controlledSprint;
+        }
 
-            // jumping logic
-            if (jump && _isGrounded)
-            {
-                startJump = true;
-            }
-            if (startJump)
+        private void HandleJumping(float delta, bool jump)
+        {
+            if (_state.HasFlag(PlayerState.PreJump))
             {
                 jumpTimer += delta;
             }
@@ -176,9 +170,9 @@ namespace OpenTK_Sprite_Animation
             if (jumpTimer >= shortHopLimit)
             {
                 _velocityY = jump ? _fullHopJumpSpeed : _shortHopJumpSpeed;
-                _isGrounded = false;
+                _state &= ~PlayerState.Grounded;
                 jumpTimer = 0.0f;
-                startJump = false;
+                _state &= ~PlayerState.PreJump;
             }
 
             _velocityY += _gravity * delta;
@@ -190,8 +184,74 @@ namespace OpenTK_Sprite_Animation
                 _position.Y = _groundY + (FrameH / 2);
                 _velocityY = 0.0f; // stop vertical movement
 
-                _isGrounded = true;
+                _state |= PlayerState.Grounded;
             }
+        }
+
+        private void CheckCollision()
+        {
+            const float CharacterHalfWidth = FrameW / 2;
+            if (_position.X - CharacterHalfWidth < 0)
+            {
+                _position.X = CharacterHalfWidth;
+            }
+            else if (_position.X + CharacterHalfWidth > Constants.WindowWidth)
+            {
+                _position.X = Constants.WindowWidth - CharacterHalfWidth;
+            }
+        }
+        public void Update(float delta, Direction dir, bool jump, bool sprint, bool crouch)
+        {
+            // set state
+            if (_state.HasFlag(PlayerState.Grounded) && jump)
+            {
+                _state |= PlayerState.PreJump;
+            }
+            if (dir == Direction.None)
+            {
+                _state |= PlayerState.Idle;
+                _state &= ~PlayerState.Walking;
+                _state &= ~PlayerState.Sprinting;
+            }
+            else if (dir == Direction.Right || dir == Direction.Left)
+            {
+                _state &= ~PlayerState.Idle;
+                if (sprint)
+                {
+                    _state &= ~PlayerState.Walking;
+                    _state |= PlayerState.Sprinting;
+                }
+                else
+                {
+                    _state &= ~PlayerState.Sprinting;
+                    _state |= PlayerState.Walking;
+                }
+            }
+            if (crouch && _state.HasFlag(PlayerState.Grounded))
+            {
+                _state &= ~PlayerState.Idle;
+                _state &= ~PlayerState.Sprinting;
+                _state &= ~PlayerState.Walking;
+                _state |= PlayerState.Crouching;
+            }
+            else
+            {
+                _state &= ~PlayerState.Crouching;
+            }
+
+            HandleSpriteChange(delta, dir);
+
+            // horizontal movement logic
+            HandleHorizontalMovement(delta, dir);
+
+            // jumping logic
+            HandleJumping(delta, jump);
+
+            // window edge collision
+            CheckCollision();
+#if DEBUG
+            PrintDebug();
+#endif
         }
 
         public void Render()
@@ -218,5 +278,25 @@ namespace OpenTK_Sprite_Animation
             GL.Uniform2(off, x, y);
             GL.Uniform2(sz, w, h);
         }
+
+#if DEBUG
+        private void PrintDebug()
+        {
+            Console.WriteLine("");
+            Console.WriteLine("");
+            Console.WriteLine("");
+            Console.WriteLine("");
+            Console.WriteLine("****** DEBUG Information ******");
+            Console.WriteLine($"_spriteTimer: {_spriteTimer}");
+            Console.WriteLine($"_frame: {_frame}");
+            Console.WriteLine($"_lastDir: {_lastDir}");
+            Console.WriteLine($"_position: {_position}");
+            Console.WriteLine($"_state: {_state}");
+            Console.WriteLine($"_velocityX: {_velocityX}");
+            Console.WriteLine($"_wasSprinting: {_wasSprinting}");
+            Console.WriteLine($"_velocityY: {_velocityY}");
+            Console.WriteLine($"jumpTimer: {jumpTimer}");
+        }
+#endif
     }
 }
