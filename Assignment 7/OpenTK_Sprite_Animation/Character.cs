@@ -14,23 +14,23 @@ namespace OpenTK_Sprite_Animation
 
         // movement variables
         private float _velocityX = 0.0f;
-        private const float _maxVelocityWalking = 200.0f; // pixels per second
-        private const float _maxVelocitySprinting = 350.0f; // pixels per second
+        private const float MaxVelocityWalking = 200.0f; // pixels per second
+        private const float MaxVelocitySprinting = 350.0f; // pixels per second
 
         // how fast he accelerates and decelerates on the ground
-        private const float _accelWalking = 1000.0f;
-        private const float _accelSprinting = 1750.0f;
+        private const float AccelWalking = 1000.0f;
+        private const float AccelSprinting = 1750.0f;
         private bool _wasSprinting = false;
 
-        private const float _airAccelFactor = 0.35f; // multiplier for acceleration in air
-        private const float _airDrag = 40.0f; // constant passive deceleration in the air
+        private const float AirAccelFactor = 0.35f; // multiplier for acceleration in air
+        private const float AirDrag = 40.0f; // constant passive deceleration in the air
         private float _velocityY = 0.0f;
-        private const float _shortHopJumpSpeed = 325f;
-        private const float _fullHopJumpSpeed = 450f;
-        private const float _groundY = 160.0f;
-        private const float _gravity = -980f;
-        private float jumpTimer = 0.0f;
-        private const float shortHopLimit = 0.1f;
+        private const float ShortHopJumpSpeed = 325f;
+        private const float FullHopJumpSpeed = 450f;
+        private const float GroundY = 160.0f;
+        private const float Gravity = -980f;
+        private float _jumpTimer = 0.0f;
+        private const float ShortHopLimit = 0.1f;
 
         // Timing
         private const float FrameTime = 0.15f; // seconds per frame
@@ -91,9 +91,9 @@ namespace OpenTK_Sprite_Animation
         {
             bool controlledSprint = !_state.HasFlag(PlayerState.Grounded) ? _wasSprinting : _state.HasFlag(PlayerState.Sprinting);
 
-            float accel = controlledSprint ? _accelSprinting : _accelWalking;
-            float normalizedAccel = (_state.HasFlag(PlayerState.Grounded) ? accel : accel * _airAccelFactor) * delta;
-            float maxVelocity = controlledSprint ? _maxVelocitySprinting : _maxVelocityWalking;
+            float accel = controlledSprint ? AccelSprinting : AccelWalking;
+            float normalizedAccel = (_state.HasFlag(PlayerState.Grounded) ? accel : accel * AirAccelFactor) * delta;
+            float maxVelocity = controlledSprint ? MaxVelocitySprinting : MaxVelocityWalking;
 
             int dirSign = dir == Direction.Right ? 1 : dir == Direction.Left ? -1 : 0;
 
@@ -140,12 +140,12 @@ namespace OpenTK_Sprite_Animation
                 {
                     if (_velocityX > 0)
                     {
-                        _velocityX -= _airDrag * delta;
+                        _velocityX -= AirDrag * delta;
                         if (_velocityX < 0) _velocityX = 0;
                     }
                     else if (_velocityX < 0)
                     {
-                        _velocityX += _airDrag * delta;
+                        _velocityX += AirDrag * delta;
                         if (_velocityX > 0) _velocityX = 0;
                     }
                 }
@@ -164,24 +164,24 @@ namespace OpenTK_Sprite_Animation
         {
             if (_state.HasFlag(PlayerState.PreJump))
             {
-                jumpTimer += delta;
+                _jumpTimer += delta;
             }
 
-            if (jumpTimer >= shortHopLimit)
+            if (_jumpTimer >= ShortHopLimit)
             {
-                _velocityY = jump ? _fullHopJumpSpeed : _shortHopJumpSpeed;
+                _velocityY = jump ? FullHopJumpSpeed : ShortHopJumpSpeed;
                 _state &= ~PlayerState.Grounded;
-                jumpTimer = 0.0f;
+                _jumpTimer = 0.0f;
                 _state &= ~PlayerState.PreJump;
             }
 
-            _velocityY += _gravity * delta;
+            _velocityY += Gravity * delta;
             _position.Y += _velocityY * delta;
 
-            if (_position.Y - (FrameH / 2) <= _groundY)
+            if (_position.Y - (FrameH / 2) <= GroundY)
             {
                 // ground collision occurred
-                _position.Y = _groundY + (FrameH / 2);
+                _position.Y = GroundY + (FrameH / 2);
                 _velocityY = 0.0f; // stop vertical movement
 
                 _state |= PlayerState.Grounded;
@@ -297,7 +297,7 @@ namespace OpenTK_Sprite_Animation
             Console.WriteLine($"_velocityX: {_velocityX}");
             Console.WriteLine($"_wasSprinting: {_wasSprinting}");
             Console.WriteLine($"_velocityY: {_velocityY}");
-            Console.WriteLine($"jumpTimer: {jumpTimer}");
+            Console.WriteLine($"jumpTimer: {_jumpTimer}");
         }
 #endif
     }
