@@ -5,6 +5,8 @@ namespace Collision3D
     class Entity
     {
         public Mesh Mesh;
+        public Material Material;
+
         public Vector3 Position;
         public Vector3 Rotation;
         public Vector3 Scale;
